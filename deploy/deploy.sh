@@ -92,7 +92,7 @@ if changed 'deploy/systemd/'; then
   RESTART_BACKEND=1; RESTART_KIOSK=1
 fi
 if changed 'deploy/systemd/'; then
-  remote 'sudo systemctl try-restart photobox-hotspot.service'
+  remote 'sudo systemctl try-restart photobox-hotspot.service photobox-hotspot-dns.service'
 fi
 if changed 'deploy/hotspot/'; then
   remote 'sudo install -m 644 /opt/photobox/deploy/hotspot/*.network /etc/systemd/network/ && sudo networkctl reload && sudo systemctl try-restart photobox-hotspot.service'

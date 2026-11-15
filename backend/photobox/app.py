@@ -10,14 +10,25 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .camera import Camera, create_camera
 from .config import Config, load_config
 from .photos import PhotoStore
-from .share import ShareLinks, expired_page, index_page, photo_page, pick_language, qr_svg, wifi_qr_svg
+from .share import (
+    ShareLinks,
+    SignedIn,
+    expired_page,
+    photo_page,
+    pick_language,
+    probe_success,
+    qr_svg,
+    signed_in_page,
+    waiting_page,
+    wifi_qr_svg,
+)
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +44,7 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
     capture_lock = asyncio.Lock()
     hotspot = cfg.hotspot
     links = ShareLinks(hotspot.link_seconds)
+    signed_in = SignedIn()
     background: set[asyncio.Task] = set()
 
     @asynccontextmanager
@@ -50,20 +62,43 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
 
     if hotspot.enabled:
         # Phones in the hotspot network reach the backend on hotspot.address:port.
-        # There they may only open single shared photos, nothing else.
+        # There they only get the captive portal and single shared photos.
+        # How the portal works: see photobox/share.py.
         phone_server = (hotspot.address, hotspot.port)
+        portal_url = f"http://{hotspot.address}{'' if hotspot.port == 80 else f':{hotspot.port}'}/"
 
         @app.middleware("http")
         async def hotspot_guard(request: Request, call_next):
             server = request.scope.get("server")
-            if server and tuple(server) == phone_server:
-                path = request.url.path
-                if path == "/":
-                    lang = pick_language(request.headers.get("accept-language"))
-                    return HTMLResponse(index_page(lang), headers=NO_STORE)
-                if not path.startswith("/d/"):
-                    return Response("Not found", status_code=404)
-            return await call_next(request)
+            if not server or tuple(server) != phone_server:
+                return await call_next(request)  # touchscreen side: everything allowed
+
+            path = request.url.path
+            host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
+            client = request.client.host if request.client else ""
+            lang = pick_language(request.headers.get("accept-language"))
+
+            probe = probe_success(path)
+            if probe and client in signed_in:
+                status, ctype, body = probe
+                return Response(body, status_code=status, media_type=ctype, headers=NO_STORE)
+            if probe or host != hotspot.address:
+                # connectivity check or any other website: send the phone to the portal
+                return RedirectResponse(portal_url, status_code=302, headers=NO_STORE)
+
+            if path == "/":
+                token = links.latest()
+                if token:
+                    name = links.resolve(token)
+                    return HTMLResponse(photo_page(lang, token, f"photobox-{name}", portal=True), headers=NO_STORE)
+                return HTMLResponse(waiting_page(lang), headers=NO_STORE)
+            if path == "/signin" and request.method == "POST":
+                signed_in.add(client)
+                log.info("Phone %s signed in to the hotspot portal", client)
+                return HTMLResponse(signed_in_page(lang, hotspot.ssid), headers=NO_STORE)
+            if path.startswith("/d/"):
+                return await call_next(request)
+            return Response("Not found", status_code=404)
 
     # written by deploy/deploy.sh; read per request, frontend-only deploys don't restart the backend
     build_file = Path(__file__).resolve().parents[2] / "BUILD"

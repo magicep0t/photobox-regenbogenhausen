@@ -24,8 +24,10 @@ DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
   python3-segno \
   hostapd \
   nftables \
-  rfkill
-# python3-segno: QR codes. hostapd + nftables + rfkill: guest hotspot for phones.
+  rfkill \
+  dnsmasq-base
+# python3-segno: QR codes. hostapd, dnsmasq-base, nftables, rfkill: guest
+# hotspot for phones (dnsmasq-base has no service of its own).
 # fake-hwclock: the Pi has no RTC; restore the last known time at boot so
 #               photo timestamps are sane before (or without) NTP.
 # grim:         screenshots of the kiosk display for debugging.
@@ -103,7 +105,7 @@ systemctl disable --now hostapd.service 2>/dev/null || true
 echo "== systemd services =="
 install -m 644 "$SCRIPT_DIR"/systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable photobox.service photobox-kiosk.service photobox-hotspot.service
+systemctl enable photobox.service photobox-kiosk.service photobox-hotspot.service photobox-hotspot-dns.service
 networkctl reload
 
 echo "Done. Reboot to start the kiosk, or: systemctl start photobox-kiosk"

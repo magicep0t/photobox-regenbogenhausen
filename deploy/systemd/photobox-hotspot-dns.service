@@ -1,0 +1,18 @@
+[Unit]
+Description=Photobox guest hotspot DNS (every name points to the photobox portal)
+# runs while the USB Wi-Fi stick is plugged in, like photobox-hotspot.service
+BindsTo=sys-subsystem-net-devices-guestwifi.device
+After=sys-subsystem-net-devices-guestwifi.device photobox-hotspot.service
+
+[Service]
+Type=exec
+# Only DNS (DHCP is done by systemd-networkd), only on the hotspot interface.
+# Every name resolves to the Pi, so phones find the captive portal.
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/dev/null \
+  --no-resolv --no-hosts --interface=guestwifi --except-interface=lo --bind-dynamic \
+  --address=/#/10.42.0.1 --local-ttl=1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=sys-subsystem-net-devices-guestwifi.device

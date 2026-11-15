@@ -161,12 +161,64 @@ def test_phones_cannot_reach_anything_else(tmp_path, method, path):
         assert getattr(phone, method)(path).status_code == 404
 
 
-def test_phone_landing_page(tmp_path):
+# ---------------------------------------------------------------- captive portal
+
+
+def via_hotspot(phone: TestClient, url: str):
+    """Request `url` the way a phone in the hotspot does: DNS points every name
+    to the Pi, so it arrives at the hotspot socket with a foreign Host header."""
+    host, _, path = url.removeprefix("http://").partition("/")
+    return phone.get("/" + path, headers={"Host": host}, follow_redirects=False)
+
+
+def test_portal_waits_without_shared_photo(tmp_path):
     _, phone = local_and_phone(tmp_path)
     with phone:
         r = phone.get("/", headers={"Accept-Language": "en"})
         assert r.status_code == 200
-        assert "scan the photo code" in r.text
+        assert "To phone" in r.text
+        assert 'http-equiv="refresh"' in r.text
+
+
+def test_portal_shows_current_photo(tmp_path):
+    local, phone = local_and_phone(tmp_path)
+    with local, phone:
+        name = local.post("/api/capture").json()["name"]
+        token = local.post(f"/api/share/{name}").json()["url"].rsplit("/", 1)[1]
+        r = phone.get("/")
+        assert f"/d/{token}/photo.jpg" in r.text
+        assert 'action="/signin"' in r.text
+        assert phone.get(f"/d/{token}/photo.jpg").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://connectivitycheck.gstatic.com/generate_204",
+        "http://www.google.com/gen_204",
+        "http://captive.apple.com/hotspot-detect.html",
+        "http://www.msftconnecttest.com/connecttest.txt",
+        "http://detectportal.firefox.com/success.txt",
+        "http://example.com/anything",
+    ],
+)
+def test_checks_redirect_to_portal(tmp_path, url):
+    _, phone = local_and_phone(tmp_path)
+    with phone:
+        r = via_hotspot(phone, url)
+        assert r.status_code == 302
+        assert r.headers["location"] == "http://testserver/"
+
+
+def test_checks_succeed_after_sign_in(tmp_path):
+    _, phone = local_and_phone(tmp_path)
+    with phone:
+        r = phone.post("/signin")
+        assert r.status_code == 200
+        assert via_hotspot(phone, "http://connectivitycheck.gstatic.com/generate_204").status_code == 204
+        assert "Success" in via_hotspot(phone, "http://captive.apple.com/hotspot-detect.html").text
+        # other websites still go to the portal
+        assert via_hotspot(phone, "http://example.com/").status_code == 302
 
 
 # ---------------------------------------------------------------- power off

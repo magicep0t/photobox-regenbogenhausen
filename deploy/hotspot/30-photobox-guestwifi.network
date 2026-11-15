@@ -1,7 +1,8 @@
 # Guest hotspot network (systemd-networkd), see deploy/hotspot/.
-# The Pi is 10.42.0.1 and hands out addresses to phones. No router and no
-# DNS are announced: phones keep using mobile data for the internet and
-# only talk to the photobox over this network.
+# The Pi is 10.42.0.1 and hands out addresses to phones. It announces itself
+# as router and DNS server, so phones run their connectivity checks against
+# it and find the captive portal (see backend/photobox/share.py). Nothing is
+# forwarded: there is no internet in this network.
 [Match]
 Name=guestwifi
 
@@ -18,7 +19,8 @@ IPv6AcceptRA=no
 [DHCPServer]
 PoolOffset=10
 PoolSize=200
-EmitRouter=no
-EmitDNS=no
+EmitRouter=yes
+EmitDNS=yes
+DNS=10.42.0.1
 EmitNTP=no
 DefaultLeaseTimeSec=900
