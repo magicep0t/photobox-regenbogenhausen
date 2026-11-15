@@ -107,8 +107,24 @@ Configuration lives in `/etc/photobox/config.toml` (see
 
 ```bash
 ssh -L 8000:127.0.0.1:8000 <user>@<pi>
-# then open http://localhost:8000/api/stream
+# then open http://localhost:8000
 ```
+
+### Deploying
+
+From the laptop, after creating `deploy/.env` from
+[`deploy/.env.example`](deploy/.env.example) (the SSH user needs passwordless
+sudo on the Pi):
+
+```bash
+deploy/deploy.sh               # run tests, sync to /opt/photobox, restart what changed
+deploy/deploy.sh --dry-run     # only show what would change
+deploy/deploy.sh --no-tests    # skip the local test run
+```
+
+Only what changed is restarted: frontend changes reload the kiosk browser,
+backend changes restart the backend (and the kiosk), changed systemd units are
+reinstalled. The deployed git commit is shown in `/api/health` as `build`.
 
 ## License
 

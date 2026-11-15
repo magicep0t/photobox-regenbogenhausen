@@ -42,9 +42,12 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
 
     app = FastAPI(title="Photobox", version=__version__, lifespan=lifespan)
 
+    build_file = Path(__file__).resolve().parents[2] / "BUILD"  # written by deploy/deploy.sh
+    build = build_file.read_text().strip() if build_file.is_file() else "dev"
+
     @app.get("/api/health")
     async def health():
-        return {"status": "ok", "version": __version__, "camera": cam.name}
+        return {"status": "ok", "version": __version__, "build": build, "camera": cam.name}
 
     @app.get("/api/config")
     async def ui_config():
