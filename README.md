@@ -1,7 +1,8 @@
 # Photobox Regenbogenhausen
 
 A DIY photo booth for parties, built on a Raspberry Pi with a touchscreen.
-Guests tap the screen, see a live preview and a countdown, and get their photo.
+Guests tap the screen, see a live preview and a countdown, and get their photo,
+which they can download to their phone by scanning a QR code.
 
 **Status:** prototype in progress. See [`docs/PLAN.md`](docs/PLAN.md) for the roadmap.
 
@@ -29,9 +30,14 @@ Guests tap the screen, see a live preview and a countdown, and get their photo.
   button to switch to German.
 - **Kiosk:** `cage` runs Chromium full-screen on the touchscreen — no desktop
   environment needed.
-- **Privacy:** photos stay on the Pi (`/var/lib/photobox/photos`). The backend
-  only listens on `127.0.0.1`; nothing is exposed to the network. Photos are
-  never committed to this repository.
+- **Photos to phones:** a USB Wi-Fi stick runs a small 5 GHz hotspot. The
+  touchscreen shows two QR codes: ① join the hotspot, ② open the photo. The
+  photo link is random and valid for 2 minutes.
+- **Privacy:** photos stay on the Pi (`/var/lib/photobox/photos`). The touch
+  UI and API only listen on `127.0.0.1`. Phones in the hotspot can reach
+  nothing but the single photo behind their link (firewalled, no routing,
+  phones isolated from each other). Photos are never committed to this
+  repository.
 
 ## Hardware (prototype)
 
@@ -41,6 +47,7 @@ Guests tap the screen, see a live preview and a countdown, and get their photo.
 | OS | Raspberry Pi OS Lite (64-bit, Debian 13 "trixie") |
 | Camera | Raspberry Pi camera module (OV5647 NoIR) |
 | Display | HDMI touchscreen, 1920×1200 |
+| Hotspot | USB Wi-Fi stick with AP mode (tested: Realtek RTL8822BU, `rtw88`) |
 | Printer | not yet |
 
 ## Repository layout
@@ -81,6 +88,12 @@ PHOTOBOX_CONFIG=../config.local.toml .venv/bin/python -m photobox
 | `GET /api/photos?limit=50` | newest photos first |
 | `GET /photos/{name}` | a photo |
 | `GET /thumbs/{name}` | 480 px thumbnail (created on first use) |
+| `GET /api/hotspot` | hotspot name and Wi-Fi QR code (SVG) |
+| `POST /api/share/{name}` | new 2-minute phone link for a photo, with QR code |
+| `POST /api/power-off` | power off the Pi (if `[system] power_off_command` is set) |
+
+Phones in the hotspot only get `GET /d/{token}` (download page) and
+`GET /d/{token}/photo.jpg`; everything else returns 404 there.
 
 ### On the Pi
 
@@ -97,6 +110,12 @@ Two systemd services run the booth:
 |---|---|
 | `photobox.service` | backend as user `photobox` (hardened, writes only to `/var/lib/photobox`) |
 | `photobox-kiosk.service` | `cage` + Chromium full-screen on `tty1`, waits for the backend |
+| `photobox-hotspot.service` | hostapd on the USB stick (named `guestwifi`), runs while it is plugged in |
+
+The hotspot pieces live in [`deploy/hotspot/`](deploy/hotspot/): the hostapd
+config is generated from the `[hotspot]` section of `config.toml`,
+systemd-networkd gives the Pi `10.42.0.1` and hands out addresses, and
+`hotspot.nft` only lets phones reach DHCP and the download page.
 
 Screenshot of the touchscreen (for debugging):
 `sudo -u photobox env XDG_RUNTIME_DIR=/run/user/$(id -u photobox) WAYLAND_DISPLAY=wayland-0 grim /tmp/screen.png`

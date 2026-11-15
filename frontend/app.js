@@ -1,6 +1,9 @@
 // Photobox touch UI.
 // States: live → countdown → (capture) → result → live
 //         live → gallery → viewer → gallery → live
+//         result / viewer → share (QR codes for phones) → back
+//         live → wifi (hotspot QR code) → live
+//         live → power1 → power2 → powering (two confirmations)
 
 import { TEXTS, loadLanguage, saveLanguage } from "./i18n.js";
 
@@ -17,8 +20,22 @@ const viewerImg = $("#viewer-img");
 const viewerCounter = $("#viewer-counter");
 const toast = $("#toast");
 const menuButtons = $("#menu-buttons");
+const shareEl = $("#share");
+const wifiQr = $("#wifi-qr");
+const wifiSsid = $("#wifi-ssid");
+const photoQr = $("#photo-qr");
+const shareTimerEl = $("#share-timer");
+const powerTitle = $("#power-title");
+const powerText = $("#power-text");
 
-let config = { countdown_seconds: 3, mirror_preview: true, idle_timeout_seconds: 60, default_language: "en" };
+let config = {
+  countdown_seconds: 3,
+  mirror_preview: true,
+  idle_timeout_seconds: 60,
+  default_language: "en",
+  hotspot: false,
+  power_off: false,
+};
 let lang = "en";
 let state = "live";
 let idleTimer = null;
@@ -26,41 +43,65 @@ let toastTimer = null;
 let galleryPhotos = [];
 let viewerIndex = 0;
 let sliding = false;
+let lastPhoto = null; // the photo shown on the result screen
+let shareReturn = "live"; // where "Back" goes from the QR codes
+let shareTimer = null;
 
 const t = (key) => TEXTS[lang][key] ?? key;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- menu ----------
 
+// Taking a photo: tap the live preview (the hint says so), no extra button.
+// Items with `when: false` are left out (e.g. no hotspot configured).
+const liveMenu = (disabled) => [
+  { key: "gallery", icon: "gallery", grow: true, action: openGallery, disabled },
+  { key: "phone_wifi", icon: "wifi", action: openWifi, disabled, when: config.hotspot },
+  { key: "language", icon: "language", small: true, action: toggleLanguage, disabled },
+  { key: "power_off", icon: "power", small: true, action: () => setState("power1"), disabled, when: config.power_off },
+];
+
 const MENUS = {
-  live: [
-    { key: "take_photo", icon: "camera", primary: true, action: startCountdown },
-    { key: "gallery", icon: "gallery", action: openGallery },
-    { key: "language", icon: "language", small: true, action: toggleLanguage },
-  ],
-  countdown: [
-    { key: "take_photo", icon: "camera", primary: true, disabled: true },
-    { key: "gallery", icon: "gallery", disabled: true },
-    { key: "language", icon: "language", small: true, disabled: true },
-  ],
-  result: [
+  live: () => liveMenu(false),
+  countdown: () => liveMenu(true),
+  result: () => [
     { key: "again", icon: "again", primary: true, action: startCountdown },
+    { key: "to_phone", icon: "phone", action: () => openShare(lastPhoto, "result"), when: config.hotspot },
     { key: "done", icon: "done", action: goLive },
   ],
-  gallery: [{ key: "back", icon: "back", primary: true, action: goLive }],
-  viewer: [
-    { key: "previous", icon: "prev", grow: true, action: () => step(-1), disabled: () => viewerIndex <= 0 },
-    { key: "next", icon: "next", grow: true, action: () => step(1), disabled: () => viewerIndex >= galleryPhotos.length - 1 },
+  gallery: () => [{ key: "back", icon: "back", primary: true, action: goLive }],
+  viewer: () => [
+    { key: "previous", icon: "prev", grow: true, action: () => step(-1), disabled: viewerIndex <= 0 },
+    { key: "next", icon: "next", grow: true, action: () => step(1), disabled: viewerIndex >= galleryPhotos.length - 1 },
+    { key: "to_phone", icon: "phone", action: () => openShare(galleryPhotos[viewerIndex], "viewer"), when: config.hotspot },
     { key: "gallery", icon: "gallery", small: true, action: backToGallery },
   ],
+  share: () => [{ key: "back", icon: "back", primary: true, action: closeShare }],
+  wifi: () => [{ key: "back", icon: "back", primary: true, action: goLive }],
+  // "Yes" sits at the bottom first and at the top second, so a double tap
+  // on the same spot can't turn the box off by accident.
+  power1: () => [
+    { key: "cancel", icon: "back", primary: true, grow: true, action: goLive },
+    { key: "power_confirm", icon: "power", danger: true, action: () => setState("power2") },
+  ],
+  power2: () => [
+    { key: "power_confirm", icon: "power", danger: true, grow: true, action: powerOff },
+    { key: "cancel", icon: "back", primary: true, action: goLive },
+  ],
+  powering: () => [],
 };
 
 function renderMenu() {
   menuButtons.replaceChildren(
-    ...MENUS[state].map((item) => {
+    ...MENUS[state]().filter((item) => item.when !== false).map((item) => {
       const btn = document.createElement("button");
-      btn.className = "menu-btn" + (item.primary ? " primary" : "") + (item.small ? " small" : "") + (item.grow ? " grow" : "");
-      btn.disabled = typeof item.disabled === "function" ? item.disabled() : !!item.disabled;
+      btn.className =
+        "menu-btn" +
+        (item.primary ? " primary" : "") +
+        (item.danger ? " danger" : "") +
+        (item.small ? " small" : "") +
+        (item.grow ? " grow" : "");
+      btn.disabled = !!item.disabled;
       btn.innerHTML = `<svg aria-hidden="true"><use href="#icon-${item.icon}"></use></svg><span></span>`;
       btn.querySelector("span").textContent = t(item.key);
       if (item.action) btn.addEventListener("click", item.action);
@@ -70,8 +111,10 @@ function renderMenu() {
 }
 
 function setState(next) {
+  if (state === "share" && next !== "share") stopShareTimer();
   state = next;
   app.dataset.state = next;
+  if (next.startsWith("power")) renderPower();
   renderMenu();
   resetIdleTimer();
 }
@@ -79,6 +122,7 @@ function setState(next) {
 function applyTexts() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+  if (state.startsWith("power")) renderPower();
   renderMenu();
 }
 
@@ -92,7 +136,8 @@ function toggleLanguage() {
 
 function resetIdleTimer() {
   clearTimeout(idleTimer);
-  if (state === "live" || state === "countdown") return;
+  // share closes itself when its link expires (see openShare)
+  if (["live", "countdown", "share", "powering"].includes(state)) return;
   idleTimer = setTimeout(goLive, config.idle_timeout_seconds * 1000);
 }
 document.addEventListener("pointerdown", resetIdleTimer, { passive: true });
@@ -103,6 +148,7 @@ function startPreview() {
   preview.src = `/api/stream?t=${Date.now()}`;
 }
 preview.addEventListener("error", () => {
+  if (state === "powering") return; // the backend is going away on purpose
   showToast(t("error_preview"));
   setTimeout(startPreview, 2000);
 });
@@ -138,6 +184,7 @@ async function startCountdown() {
     const res = await fetch("/api/capture", { method: "POST" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const photo = await res.json();
+    lastPhoto = photo;
     await showResult(photo);
   } catch (err) {
     console.error("capture failed", err);
@@ -278,6 +325,97 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") step(-1);
   if (e.key === "Escape") backToGallery();
 });
+
+// ---------- phones: hotspot + photo QR codes ----------
+
+let wifiLoaded = false;
+
+async function loadWifi() {
+  if (wifiLoaded) return;
+  const res = await fetch("/api/hotspot");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body = await res.json();
+  wifiQr.innerHTML = body.qr_svg; // SVG generated by our own backend
+  wifiSsid.textContent = body.ssid;
+  wifiLoaded = true;
+}
+
+async function openWifi() {
+  try {
+    await loadWifi();
+  } catch (err) {
+    console.error("hotspot failed", err);
+    showToast(t("error_share"));
+    return;
+  }
+  shareEl.dataset.mode = "wifi";
+  setState("wifi");
+}
+
+async function openShare(photo, returnTo) {
+  if (!photo) return;
+  let body;
+  try {
+    await loadWifi();
+    const res = await fetch(`/api/share/${encodeURIComponent(photo.name)}`, { method: "POST" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    body = await res.json();
+  } catch (err) {
+    console.error("share failed", err);
+    showToast(t("error_share"));
+    return;
+  }
+  photoQr.innerHTML = body.qr_svg;
+  shareEl.dataset.mode = "photo";
+  shareReturn = returnTo;
+  setState("share");
+
+  // count down; when the link expires the codes are useless, so close them
+  const expiresAt = Date.now() + body.expires_in * 1000;
+  const tick = () => {
+    const left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+    shareTimerEl.textContent = `${t("share_valid")} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    if (left === 0) closeShare();
+  };
+  tick();
+  shareTimer = setInterval(tick, 1000);
+}
+
+function stopShareTimer() {
+  clearInterval(shareTimer);
+  shareTimer = null;
+  photoQr.replaceChildren();
+}
+
+function closeShare() {
+  setState(shareReturn);
+}
+
+// ---------- power off ----------
+
+function renderPower() {
+  const texts = {
+    power1: ["power_q1", null],
+    power2: ["power_q2", null],
+    powering: ["power_bye", "power_bye_text"],
+  }[state];
+  powerTitle.textContent = t(texts[0]);
+  powerText.textContent = texts[1] ? t(texts[1]) : "";
+}
+
+async function powerOff() {
+  try {
+    const res = await fetch("/api/power-off", { method: "POST" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    console.error("power off failed", err);
+    showToast(t("error_power"));
+    goLive();
+    return;
+  }
+  preview.removeAttribute("src"); // stop the stream
+  setState("powering");
+}
 
 // ---------- toast ----------
 

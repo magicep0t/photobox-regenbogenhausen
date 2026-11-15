@@ -32,6 +32,8 @@ def test_ui_config_defaults(client):
         "mirror_preview": True,
         "idle_timeout_seconds": 60,
         "default_language": "en",
+        "hotspot": False,
+        "power_off": False,
     }
 
 

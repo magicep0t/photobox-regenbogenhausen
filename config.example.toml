@@ -20,3 +20,20 @@ countdown_seconds = 3
 mirror_preview = true       # preview acts like a mirror; saved photos are not mirrored
 idle_timeout_seconds = 60
 default_language = "en"     # "en" or "de"
+
+[hotspot]
+# Guest Wi-Fi on a USB stick, so phones can download photos via QR code.
+# deploy/setup-pi.sh adds this section with a random password.
+enabled = false
+ssid = "Photobox"
+password = ""               # 8–63 characters; only shown as QR code
+country = "DE"
+channel = 36                # 5 GHz only: 36, 40, 44 or 48 (short range)
+address = "10.42.0.1"       # must match deploy/hotspot/30-photobox-guestwifi.network
+port = 80
+link_seconds = 120          # a photo link is valid for 2 minutes
+
+[system]
+# command behind the power-off button; empty = no button
+# (setup-pi.sh sets ["systemctl", "poweroff"], allowed by a polkit rule)
+power_off_command = []

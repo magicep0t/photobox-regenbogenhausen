@@ -9,11 +9,12 @@ description = "Raspberry Pi photo booth backend"
 license = "MIT"
 requires-python = ">=3.11"
 # On the Pi these come from Debian packages (python3-fastapi, python3-uvicorn,
-# python3-picamera2, python3-pil); see deploy/setup-pi.sh.
+# python3-picamera2, python3-pil, python3-segno); see deploy/setup-pi.sh.
 dependencies = [
   "fastapi>=0.110",
   "uvicorn>=0.30",
   "pillow>=10",
+  "segno>=1.5",
 ]
 
 [project.optional-dependencies]

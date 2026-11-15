@@ -1,0 +1,24 @@
+# Guest hotspot network (systemd-networkd), see deploy/hotspot/.
+# The Pi is 10.42.0.1 and hands out addresses to phones. No router and no
+# DNS are announced: phones keep using mobile data for the internet and
+# only talk to the photobox over this network.
+[Match]
+Name=guestwifi
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+Address=10.42.0.1/24
+DHCPServer=yes
+ConfigureWithoutCarrier=yes
+LinkLocalAddressing=no
+IPv6AcceptRA=no
+
+[DHCPServer]
+PoolOffset=10
+PoolSize=200
+EmitRouter=no
+EmitDNS=no
+EmitNTP=no
+DefaultLeaseTimeSec=900

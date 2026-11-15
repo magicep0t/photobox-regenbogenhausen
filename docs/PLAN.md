@@ -14,7 +14,7 @@
 
 ## Touch flow (prototype)
 
-1. **Start screen** — live preview, "Tap to start"
+1. **Start screen** — live preview, tap anywhere to take a photo
 2. **Countdown** — 3 – 2 – 1, white flash
 3. **Result** — "Again" / "Done" (print comes later)
 4. **Gallery** — recent photos; back to start after a timeout
@@ -29,6 +29,7 @@
 | 3 ✅ | Frontend (menu on the right): start → countdown → flash → result → gallery, idle timeout, EN/DE toggle | full flow in a laptop browser via SSH tunnel |
 | 4 ✅ | Kiosk: `photobox.service` + `photobox-kiosk.service`, autostart, no screen blanking, touch check | Pi reboots straight into the booth |
 | 5 ✅ | `deploy/deploy.sh`: rsync laptop → Pi, restart service | one command to deploy |
+| 6 ✅ | Photos to phones: 5 GHz guest hotspot on a USB Wi-Fi stick (hostapd, firewalled), QR codes for Wi-Fi + a 2-minute photo link; power-off button with two confirmations; no "take photo" button (tap the preview) | guest downloads a photo with a phone |
 
 ## Later
 
@@ -36,4 +37,4 @@
 - Real camera via gphoto2
 - Physical buzzer button (GPIO)
 - Frames / party branding
-- Network gallery with QR-code download
+- Captive-portal tricks if phones refuse to use a Wi-Fi without internet

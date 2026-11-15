@@ -1,0 +1,29 @@
+#!/usr/sbin/nft -f
+# Firewall for the guest hotspot (interface "guestwifi").
+# Phones may only get an address (DHCP) and open the photo download page;
+# no SSH, no other services on the Pi, no routing into other networks.
+# Loaded by photobox-hotspot.service; touches only its own table.
+
+table inet photobox_hotspot {}
+delete table inet photobox_hotspot
+
+table inet photobox_hotspot {
+	chain input {
+		type filter hook input priority filter - 10; policy accept;
+		iifname "guestwifi" jump guests
+	}
+
+	chain guests {
+		ct state established,related accept
+		udp dport 67 accept comment "DHCP"
+		tcp dport 80 accept comment "photo download page"
+		icmp type echo-request accept
+		counter drop
+	}
+
+	chain forward {
+		type filter hook forward priority filter - 10; policy accept;
+		iifname "guestwifi" drop
+		oifname "guestwifi" drop
+	}
+}

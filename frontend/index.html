@@ -16,6 +16,9 @@
     <symbol id="icon-done" viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></symbol>
     <symbol id="icon-prev" viewBox="0 0 24 24"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12l4.6-4.6Z"/></symbol>
     <symbol id="icon-next" viewBox="0 0 24 24"><path d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4 4.6 4.6-4.6 4.6Z"/></symbol>
+    <symbol id="icon-phone" viewBox="0 0 24 24"><path d="M17 1.01 7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99ZM17 19H7V5h10v14Z"/></symbol>
+    <symbol id="icon-wifi" viewBox="0 0 24 24"><path d="m1 9 2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9Zm8 8 3 3 3-3a4.24 4.24 0 0 0-6 0Zm-4-4 2 2a7.07 7.07 0 0 1 10 0l2-2C15.14 9.14 8.87 9.14 5 13Z"/></symbol>
+    <symbol id="icon-power" viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3Zm4.83 2.17-1.42 1.42A6.92 6.92 0 0 1 19 12a7 7 0 1 1-11.42-5.42L6.17 5.17A8.93 8.93 0 0 0 3 12a9 9 0 0 0 18 0c0-2.74-1.23-5.18-3.17-6.83Z"/></symbol>
     <symbol id="icon-back" viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2Z"/></symbol>
   </svg>
 
@@ -38,6 +41,33 @@
       <div id="viewer" class="layer">
         <img id="viewer-img" alt="">
         <div id="viewer-counter"></div>
+      </div>
+
+      <!-- QR codes for guests' phones: ① join the hotspot, ② open the photo -->
+      <div id="share" class="layer">
+        <div class="share-cards">
+          <section class="share-card">
+            <h2><span class="step">1</span><span data-i18n="share_step_wifi"></span></h2>
+            <div class="qr" id="wifi-qr"></div>
+            <p class="share-sub"><span data-i18n="wifi_name"></span> <strong id="wifi-ssid"></strong></p>
+          </section>
+          <section class="share-card" id="share-photo">
+            <h2><span class="step">2</span><span data-i18n="share_step_photo"></span></h2>
+            <div class="qr" id="photo-qr"></div>
+            <p class="share-sub" id="share-timer"></p>
+          </section>
+        </div>
+        <p class="share-hint" id="share-next" data-i18n="share_next"></p>
+        <p class="share-hint" data-i18n="share_hint"></p>
+      </div>
+
+      <!-- power off: two confirmations, then a goodbye message -->
+      <div id="power" class="layer">
+        <div class="power-box">
+          <svg aria-hidden="true"><use href="#icon-power"></use></svg>
+          <h2 id="power-title"></h2>
+          <p id="power-text"></p>
+        </div>
       </div>
 
       <div id="toast" role="status"></div>

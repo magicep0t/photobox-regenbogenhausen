@@ -91,6 +91,17 @@ if changed 'deploy/systemd/'; then
   echo "systemd units updated"
   RESTART_BACKEND=1; RESTART_KIOSK=1
 fi
+if changed 'deploy/systemd/'; then
+  remote 'sudo systemctl try-restart photobox-hotspot.service'
+fi
+if changed 'deploy/hotspot/'; then
+  remote 'sudo install -m 644 /opt/photobox/deploy/hotspot/*.network /etc/systemd/network/ && sudo networkctl reload && sudo systemctl try-restart photobox-hotspot.service'
+  echo "hotspot updated"
+fi
+if changed 'deploy/polkit/'; then
+  remote 'sudo install -m 644 /opt/photobox/deploy/polkit/*.rules /etc/polkit-1/rules.d/'
+  echo "polkit rules updated"
+fi
 changed 'backend/' && RESTART_BACKEND=1
 changed 'frontend/' && RESTART_KIOSK=1   # reload the page in the kiosk browser
 [ "$RESTART_BACKEND" = 1 ] && RESTART_KIOSK=1  # the kiosk's stream dies with the backend

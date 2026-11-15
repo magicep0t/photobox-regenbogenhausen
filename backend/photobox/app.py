@@ -10,17 +10,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .camera import Camera, create_camera
 from .config import Config, load_config
 from .photos import PhotoStore
+from .share import ShareLinks, expired_page, index_page, photo_page, pick_language, qr_svg, wifi_qr_svg
 
 log = logging.getLogger(__name__)
 
 BOUNDARY = "frame"
+NO_STORE = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 DEFAULT_FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 
@@ -29,6 +31,9 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
     cam = camera or create_camera(cfg.camera)
     store = PhotoStore(cfg.photos_dir)
     capture_lock = asyncio.Lock()
+    hotspot = cfg.hotspot
+    links = ShareLinks(hotspot.link_seconds)
+    background: set[asyncio.Task] = set()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -41,6 +46,24 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
             await asyncio.to_thread(cam.stop)
 
     app = FastAPI(title="Photobox", version=__version__, lifespan=lifespan)
+    app.state.share_links = links
+
+    if hotspot.enabled:
+        # Phones in the hotspot network reach the backend on hotspot.address:port.
+        # There they may only open single shared photos, nothing else.
+        phone_server = (hotspot.address, hotspot.port)
+
+        @app.middleware("http")
+        async def hotspot_guard(request: Request, call_next):
+            server = request.scope.get("server")
+            if server and tuple(server) == phone_server:
+                path = request.url.path
+                if path == "/":
+                    lang = pick_language(request.headers.get("accept-language"))
+                    return HTMLResponse(index_page(lang), headers=NO_STORE)
+                if not path.startswith("/d/"):
+                    return Response("Not found", status_code=404)
+            return await call_next(request)
 
     # written by deploy/deploy.sh; read per request, frontend-only deploys don't restart the backend
     build_file = Path(__file__).resolve().parents[2] / "BUILD"
@@ -57,6 +80,8 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
             "mirror_preview": cfg.ui.mirror_preview,
             "idle_timeout_seconds": cfg.ui.idle_timeout_seconds,
             "default_language": cfg.ui.default_language,
+            "hotspot": hotspot.enabled,
+            "power_off": bool(cfg.system.power_off_command),
         }
 
     @app.get("/api/stream")
@@ -126,6 +151,70 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
         if path is None:
             raise HTTPException(404, "Photo not found")
         return FileResponse(path, media_type="image/jpeg")
+
+    # ------------------------------------------------------------ phone sharing
+
+    def require_hotspot():
+        if not hotspot.enabled:
+            raise HTTPException(404, "Hotspot is not enabled")
+
+    @app.get("/api/hotspot")
+    async def hotspot_info():
+        require_hotspot()
+        return {"ssid": hotspot.ssid, "qr_svg": wifi_qr_svg(hotspot.ssid, hotspot.password)}
+
+    @app.post("/api/share/{name}")
+    async def share_photo(name: str):
+        """New short-lived link to one photo, as URL and QR code."""
+        require_hotspot()
+        if store.get(name) is None:
+            raise HTTPException(404, "Photo not found")
+        token = links.create(name)
+        port = "" if hotspot.port == 80 else f":{hotspot.port}"
+        url = f"http://{hotspot.address}{port}/d/{token}"
+        return {"url": url, "expires_in": hotspot.link_seconds, "qr_svg": qr_svg(url)}
+
+    @app.get("/d/{token}")
+    async def phone_page(token: str, request: Request):
+        lang = pick_language(request.headers.get("accept-language"))
+        name = links.resolve(token)
+        if name is None or store.get(name) is None:
+            return HTMLResponse(expired_page(lang), status_code=410, headers=NO_STORE)
+        return HTMLResponse(photo_page(lang, token, f"photobox-{name}"), headers=NO_STORE)
+
+    @app.get("/d/{token}/photo.jpg")
+    async def phone_photo(token: str, download: bool = False):
+        name = links.resolve(token)
+        path = store.get(name) if name else None
+        if path is None:
+            raise HTTPException(410, "Link expired")
+        return FileResponse(
+            path,
+            media_type="image/jpeg",
+            filename=f"photobox-{name}",
+            content_disposition_type="attachment" if download else "inline",
+            headers=NO_STORE,
+        )
+
+    # ------------------------------------------------------------ power off
+
+    @app.post("/api/power-off", status_code=202)
+    async def power_off():
+        command = cfg.system.power_off_command
+        if not command:
+            raise HTTPException(404, "Power off is not enabled")
+
+        async def run():
+            await asyncio.sleep(1)  # let the UI show its goodbye message first
+            log.warning("Powering off: %s", " ".join(command))
+            proc = await asyncio.create_subprocess_exec(*command)
+            if await proc.wait() != 0:
+                log.error("Power off command failed with exit code %s", proc.returncode)
+
+        task = asyncio.create_task(run())
+        background.add(task)
+        task.add_done_callback(background.discard)
+        return {"status": "powering off"}
 
     frontend_dir = cfg.frontend_dir or DEFAULT_FRONTEND_DIR
     if (frontend_dir / "index.html").exists():
