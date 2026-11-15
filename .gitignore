@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration (host, user, secrets) — never commit
+deploy/.env
+config.local.toml
+*.local.toml
+
+# Photos and other runtime data — never commit
+photos/
+*.jpg
+*.jpeg
+*.png
+!frontend/**/*.png
+!docs/**/*.png
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
