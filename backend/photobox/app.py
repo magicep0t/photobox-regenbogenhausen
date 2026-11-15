@@ -9,7 +9,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -56,10 +56,10 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
         }
 
     @app.get("/api/stream")
-    async def stream():
+    async def stream(request: Request):
         async def frames():
             seq = 0
-            while True:
+            while not await request.is_disconnected():
                 seq, frame = await asyncio.to_thread(cam.preview.wait_for_frame, seq)
                 if frame is None:
                     continue  # timeout (e.g. preview paused during a capture); keep waiting

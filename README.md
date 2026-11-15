@@ -84,6 +84,23 @@ PHOTOBOX_CONFIG=../config.local.toml .venv/bin/python -m photobox
 
 ### On the Pi
 
+First-time setup (packages, `photobox` user, directories, services):
+
+```bash
+sudo bash deploy/setup-pi.sh   # run from a copy of the repo on the Pi
+sudo reboot                    # boots straight into the booth (~25 s)
+```
+
+Two systemd services run the booth:
+
+| Service | |
+|---|---|
+| `photobox.service` | backend as user `photobox` (hardened, writes only to `/var/lib/photobox`) |
+| `photobox-kiosk.service` | `cage` + Chromium full-screen on `tty1`, waits for the backend |
+
+Screenshot of the touchscreen (for debugging):
+`sudo -u photobox env XDG_RUNTIME_DIR=/run/user/$(id -u photobox) WAYLAND_DISPLAY=wayland-0 grim /tmp/screen.png`
+
 Configuration lives in `/etc/photobox/config.toml` (see
 [`config.example.toml`](config.example.toml)). The backend only listens on
 `127.0.0.1`; to look at it from a laptop, use an SSH tunnel:

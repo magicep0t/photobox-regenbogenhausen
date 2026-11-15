@@ -13,7 +13,14 @@ from .config import load_config
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = load_config()
-    uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, log_level="info")
+    uvicorn.run(
+        create_app(cfg),
+        host=cfg.host,
+        port=cfg.port,
+        log_level="info",
+        # the MJPEG stream never ends by itself; don't wait for it on shutdown
+        timeout_graceful_shutdown=3,
+    )
 
 
 if __name__ == "__main__":

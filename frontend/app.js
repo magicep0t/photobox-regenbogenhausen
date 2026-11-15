@@ -193,6 +193,8 @@ function showToast(message) {
 
 // ---------- kiosk hardening ----------
 
+// on the touchscreen (?kiosk=1) there is no mouse pointer
+if (new URLSearchParams(location.search).has("kiosk")) document.documentElement.classList.add("kiosk");
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 document.addEventListener("dragstart", (e) => e.preventDefault());
 

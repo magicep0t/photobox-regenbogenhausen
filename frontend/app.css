@@ -28,6 +28,8 @@ html, body {
 
 img { -webkit-user-drag: none; }
 
+.kiosk, .kiosk * { cursor: none !important; }
+
 #app {
   display: grid;
   grid-template-columns: 1fr var(--menu-width);

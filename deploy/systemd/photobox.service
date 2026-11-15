@@ -1,0 +1,30 @@
+[Unit]
+Description=Photobox backend (camera, API, touch UI)
+After=network.target
+
+[Service]
+Type=exec
+User=photobox
+Group=photobox
+WorkingDirectory=/opt/photobox/backend
+Environment=PYTHONPATH=/opt/photobox/backend
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m photobox
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+
+# Hardening. The camera needs real device access, so no PrivateDevices.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/photobox
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
