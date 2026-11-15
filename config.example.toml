@@ -1,0 +1,22 @@
+# Photobox configuration.
+# On the Pi this lives at /etc/photobox/config.toml.
+# For local development: PHOTOBOX_CONFIG=config.local.toml (git-ignored).
+# Every key is optional; the values below are the defaults unless noted.
+
+host = "127.0.0.1"          # keep on localhost: nothing is exposed to the network
+port = 8000
+photos_dir = "/var/lib/photobox/photos"
+
+[camera]
+driver = "picamera2"        # "picamera2" (Pi camera) or "mock" (test images, no hardware)
+rotation = 0                # 0 or 180 (camera mounted upside down)
+# tuning_file = "ov5647_noir.json"   # NoIR camera modules
+preview_size = [1280, 960]
+# still_size = [2592, 1944]          # default: sensor maximum
+jpeg_quality = 92
+
+[ui]
+countdown_seconds = 3
+mirror_preview = true       # preview acts like a mirror; saved photos are not mirrored
+idle_timeout_seconds = 60
+default_language = "en"     # "en" or "de"

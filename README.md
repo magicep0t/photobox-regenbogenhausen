@@ -54,8 +54,43 @@ docs/       Plan and notes
 
 ## Development
 
-Setup, running and deploying are documented as each phase lands
-(see [`docs/PLAN.md`](docs/PLAN.md)).
+The backend runs on any machine with the `mock` camera driver, which renders
+test images instead of using real hardware.
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/python -m pytest
+
+# run locally with the mock camera
+printf 'photos_dir = "/tmp/photobox-photos"\n[camera]\ndriver = "mock"\n' > ../config.local.toml
+PHOTOBOX_CONFIG=../config.local.toml .venv/bin/python -m photobox
+# → http://127.0.0.1:8000/api/stream
+```
+
+### API
+
+| Endpoint | |
+|---|---|
+| `GET /api/health` | status, version, camera model |
+| `GET /api/config` | UI settings (countdown, mirroring, idle timeout, language) |
+| `GET /api/stream` | live preview as MJPEG |
+| `GET /api/snapshot` | latest preview frame as JPEG |
+| `POST /api/capture` | take a full-resolution photo |
+| `GET /api/photos?limit=50` | newest photos first |
+| `GET /photos/{name}` | a photo |
+
+### On the Pi
+
+Configuration lives in `/etc/photobox/config.toml` (see
+[`config.example.toml`](config.example.toml)). The backend only listens on
+`127.0.0.1`; to look at it from a laptop, use an SSH tunnel:
+
+```bash
+ssh -L 8000:127.0.0.1:8000 <user>@<pi>
+# then open http://localhost:8000/api/stream
+```
 
 ## License
 

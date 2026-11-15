@@ -13,7 +13,9 @@ echo "== Packages =="
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
   python3-picamera2 \
-  python3-venv \
+  python3-fastapi \
+  python3-uvicorn \
+  python3-pil \
   cage \
   chromium \
   fonts-dejavu-core
