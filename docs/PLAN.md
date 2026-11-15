@@ -23,8 +23,8 @@
 
 | # | What | Done when |
 |---|---|---|
-| 0 | Repository, README, license, skeleton | repo on GitHub |
-| 1 | Pi base: `python3-picamera2`, `cage`, `chromium` (no recommends); system user `photobox` (`video`, `input`); `/opt/photobox`, `/var/lib/photobox` | camera works as user `photobox` |
+| 0 ✅ | Repository, README, license, skeleton | repo on GitHub |
+| 1 ✅ | Pi base (`deploy/setup-pi.sh`): `python3-picamera2`, `cage`, `chromium` (no recommends); system user `photobox` (`video`, `input`); `/opt/photobox`, `/var/lib/photobox` | camera works as user `photobox` |
 | 2 | Backend: camera layer, `GET /stream`, `POST /capture`, `GET /photos`, config file (rotation, resolution, countdown) | preview + capture in a laptop browser via SSH tunnel |
 | 3 | Frontend: start → countdown → flash → result → gallery, idle timeout, EN/DE toggle | full flow in a laptop browser via SSH tunnel |
 | 4 | Kiosk: `photobox.service` + `photobox-kiosk.service`, autostart, no screen blanking, touch check | Pi reboots straight into the booth |
