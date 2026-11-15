@@ -102,6 +102,7 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
                 raise HTTPException(500, "Capture failed") from None
         photo = store.photo(path)
         log.info("Captured %s", photo.name)
+        await asyncio.to_thread(store.thumb, photo.name)
         return photo.to_dict()
 
     @app.get("/api/photos")
@@ -111,6 +112,13 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
     @app.get("/photos/{name}")
     async def get_photo(name: str):
         path = store.get(name)
+        if path is None:
+            raise HTTPException(404, "Photo not found")
+        return FileResponse(path, media_type="image/jpeg")
+
+    @app.get("/thumbs/{name}")
+    async def get_thumb(name: str):
+        path = await asyncio.to_thread(store.thumb, name)
         if path is None:
             raise HTTPException(404, "Photo not found")
         return FileResponse(path, media_type="image/jpeg")

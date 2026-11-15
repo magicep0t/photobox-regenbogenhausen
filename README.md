@@ -80,6 +80,7 @@ PHOTOBOX_CONFIG=../config.local.toml .venv/bin/python -m photobox
 | `POST /api/capture` | take a full-resolution photo |
 | `GET /api/photos?limit=50` | newest photos first |
 | `GET /photos/{name}` | a photo |
+| `GET /thumbs/{name}` | 480 px thumbnail (created on first use) |
 
 ### On the Pi
 

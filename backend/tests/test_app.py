@@ -54,8 +54,18 @@ def test_capture_and_gallery(client, tmp_path):
     assert img.status_code == 200
     assert Image.open(__import__("io").BytesIO(img.content)).size == (640, 480)
 
+    thumb = client.get(photo["thumb_url"])
+    assert thumb.status_code == 200
+    assert max(Image.open(__import__("io").BytesIO(thumb.content)).size) == 480
+
     # no temp files left behind
     assert not list((tmp_path / "photos").glob(".capture-*"))
+    assert not list((tmp_path / "photos" / ".thumbs").glob(".*.tmp"))
+
+
+def test_thumb_rejects_bad_names(client):
+    assert client.get("/thumbs/..%2F..%2Fetc%2Fpasswd").status_code == 404
+    assert client.get("/thumbs/20260101-120000-abcdef.jpg").status_code == 404
 
 
 @pytest.mark.parametrize("name", ["../etc/passwd", "x.jpg", "20260101-120000-abcdef.png", "..%2Fsecret"])

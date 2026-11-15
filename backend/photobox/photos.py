@@ -11,18 +11,45 @@ from pathlib import Path
 NAME_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}\.jpg$")
 
 
+THUMB_SIZE = (480, 480)
+
+
 @dataclass(frozen=True)
 class Photo:
     name: str
     taken_at: datetime
 
     def to_dict(self) -> dict:
-        return {"name": self.name, "url": f"/photos/{self.name}", "taken_at": self.taken_at.isoformat()}
+        return {
+            "name": self.name,
+            "url": f"/photos/{self.name}",
+            "thumb_url": f"/thumbs/{self.name}",
+            "taken_at": self.taken_at.isoformat(),
+        }
 
 
 class PhotoStore:
     def __init__(self, directory: Path) -> None:
         self.directory = directory
+        self.thumbs_dir = directory / ".thumbs"
+
+    def thumb(self, name: str) -> Path | None:
+        """Return the thumbnail for photo ``name``, creating it on first use."""
+        photo = self.get(name)
+        if photo is None:
+            return None
+        thumb = self.thumbs_dir / name
+        if not thumb.is_file():
+            from PIL import Image  # local import: only needed when thumbnails are generated
+
+            self.thumbs_dir.mkdir(exist_ok=True)
+            tmp = thumb.with_name(f".{name}.tmp")
+            with Image.open(photo) as img:
+                img.draft("RGB", THUMB_SIZE)  # fast JPEG downscale while decoding
+                img.thumbnail(THUMB_SIZE)
+                img.save(tmp, "JPEG", quality=80)
+            tmp.replace(thumb)
+        return thumb
 
     def new_path(self) -> Path:
         name = f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}.jpg"
