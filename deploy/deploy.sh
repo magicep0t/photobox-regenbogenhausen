@@ -102,6 +102,11 @@ if changed 'deploy/polkit/'; then
   remote 'sudo install -m 644 /opt/photobox/deploy/polkit/*.rules /etc/polkit-1/rules.d/'
   echo "polkit rules updated"
 fi
+if changed 'deploy/udev/'; then
+  remote 'sudo install -m 644 /opt/photobox/deploy/udev/*.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=input --action=change'
+  echo "udev rules updated"
+  RESTART_KIOSK=1  # the compositor picks up input devices at start
+fi
 changed 'backend/' && RESTART_BACKEND=1
 changed 'frontend/' && RESTART_KIOSK=1   # reload the page in the kiosk browser
 [ "$RESTART_BACKEND" = 1 ] && RESTART_KIOSK=1  # the kiosk's stream dies with the backend

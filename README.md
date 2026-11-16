@@ -32,7 +32,9 @@ which they can download to their phone by scanning a QR code.
   environment needed.
 - **Photos to phones:** a USB Wi-Fi stick runs a small 5 GHz hotspot. The
   touchscreen shows two QR codes: ① join the hotspot, ② open the photo. The
-  photo link is random and valid for 2 minutes.
+  photo link is random and valid for 5 minutes; several photos can be
+  shared at the same time, and the touchscreen stays usable meanwhile
+  ("Back" closes the codes, the link keeps working).
 - **Privacy:** photos stay on the Pi (`/var/lib/photobox/photos`). The touch
   UI and API only listen on `127.0.0.1`. Phones in the hotspot can reach
   nothing but the single photo behind their link (firewalled, no routing,
@@ -55,7 +57,7 @@ which they can download to their phone by scanning a QR code.
 ```
 backend/    Python package (FastAPI app, camera drivers)
 frontend/   Touch UI served by the backend
-deploy/     Deploy script and systemd units
+deploy/     Deploy script, systemd units, hotspot, polkit and udev files
 docs/       Plan and notes
 ```
 
@@ -89,7 +91,7 @@ PHOTOBOX_CONFIG=../config.local.toml .venv/bin/python -m photobox
 | `GET /photos/{name}` | a photo |
 | `GET /thumbs/{name}` | 480 px thumbnail (created on first use) |
 | `GET /api/hotspot` | hotspot name and Wi-Fi QR code (SVG) |
-| `POST /api/share/{name}` | new 2-minute phone link for a photo, with QR code |
+| `POST /api/share/{name}` | new 5-minute phone link for a photo, with QR code |
 | `POST /api/power-off` | power off the Pi (if `[system] power_off_command` is set) |
 
 Phones in the hotspot only get `GET /d/{token}` (download page) and
@@ -116,6 +118,11 @@ The hotspot pieces live in [`deploy/hotspot/`](deploy/hotspot/): the hostapd
 config is generated from the `[hotspot]` section of `config.toml`,
 systemd-networkd gives the Pi `10.42.0.1` and hands out addresses, and
 `hotspot.nft` only lets phones reach DHCP and the download page.
+
+The USB touch panel reports every tap twice (as touchscreen and as emulated
+mouse). [`deploy/udev/70-photobox-touch.rules`](deploy/udev/) makes libinput
+ignore the mouse half; the UI also drops clicks that come in right after
+another one.
 
 Screenshot of the touchscreen (for debugging):
 `sudo -u photobox env XDG_RUNTIME_DIR=/run/user/$(id -u photobox) WAYLAND_DISPLAY=wayland-0 grim /tmp/screen.png`

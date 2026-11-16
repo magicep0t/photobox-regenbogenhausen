@@ -9,8 +9,8 @@ browser traffic over mobile data, so a plain link to the Pi would not load.
 The hotspot therefore acts as a *captive portal* (like hotel Wi-Fi): every
 DNS name points to the Pi and the phones' connectivity checks get a redirect
 to the portal page. Phones open that page in a sign-in window that always
-uses the hotspot, and the page shows the photo currently offered on the
-touchscreen. "Done" on that page marks the phone as signed in, so the
+uses the hotspot, and the page shows every photo currently offered (several
+guests may share photos at the same time, newest first). "Done" on that page marks the phone as signed in, so the
 connectivity checks succeed and the phone stays connected (iPhones would
 otherwise drop the network when the sign-in window is closed).
 """
@@ -49,13 +49,18 @@ class ShareLinks:
             entry = self._links.get(token)
         return entry[0] if entry else None
 
-    def latest(self) -> str | None:
-        """Token of the newest unexpired link (the one on the touchscreen right now)."""
+    def active(self) -> list[tuple[str, str]]:
+        """(token, photo name) of all unexpired links, newest first, one per photo."""
         with self._lock:
             self._purge()
-            if not self._links:
-                return None
-            return max(self._links, key=lambda t: self._links[t][1])
+            newest_first = sorted(self._links.items(), key=lambda item: item[1][1], reverse=True)
+        seen: set[str] = set()
+        result = []
+        for token, (name, _) in newest_first:
+            if name not in seen:
+                seen.add(name)
+                result.append((token, name))
+        return result
 
     def __len__(self) -> int:
         with self._lock:
@@ -127,6 +132,9 @@ def probe_success(path: str) -> tuple[int, str, str] | None:
 TEXTS = {
     "en": {
         "title": "Your photo",
+        "titles": "Your photos",
+        "several": "Photos shared in the last few minutes, newest first. Save yours.",
+        "refresh": "Reload",
         "save": "Save photo",
         "hint": "Or press and hold the photo and choose “Save image” / “Save to Photos”.",
         "done": "Done",
@@ -141,6 +149,9 @@ TEXTS = {
     },
     "de": {
         "title": "Dein Foto",
+        "titles": "Eure Fotos",
+        "several": "Fotos der letzten Minuten, das neueste zuerst. Speichere deins.",
+        "refresh": "Neu laden",
         "save": "Foto speichern",
         "hint": "Oder Foto lange drücken und „Bild speichern“ / „Zu Fotos hinzufügen“ wählen.",
         "done": "Fertig",
@@ -179,6 +190,7 @@ img { display: block; width: 100%; border-radius: 12px; background: #18181c; }
        background: #ffd60a; color: #111; font: inherit; font-size: 21px; font-weight: 700; text-decoration: none; }
 .btn.secondary { background: #24242a; color: #f5f5f7; }
 .hint { font-size: 15px; color: #a1a1aa; }
+.photo { margin: 0 0 36px; }
 """
 
 
@@ -213,6 +225,26 @@ def photo_page(lang: str, token: str, filename: str, portal: bool = False) -> st
         + (_done_form(t) if portal else "")
     )
     return _page(lang, t["title"], body)
+
+
+def portal_page(lang: str, photos: list[tuple[str, str]]) -> str:
+    """Portal start page with all shared photos (token, download filename), newest first."""
+    if len(photos) == 1:
+        token, filename = photos[0]
+        return photo_page(lang, token, filename, portal=True)
+    t = TEXTS[lang]
+    items = "".join(
+        f'<section class="photo"><img src="/d/{token}/photo.jpg" alt="" loading="lazy">'
+        f'<a class="btn" download="{html.escape(filename)}" href="/d/{token}/photo.jpg?download=1">'
+        f"{html.escape(t['save'])}</a></section>"
+        for token, filename in photos
+    )
+    body = (
+        f"<h1>{html.escape(t['titles'])}</h1><p>{html.escape(t['several'])}</p>{items}"
+        f'<p class="hint">{html.escape(t["hint"])}</p>'
+        f'<a class="btn secondary" href="/">{html.escape(t["refresh"])}</a>' + _done_form(t)
+    )
+    return _page(lang, t["titles"], body)
 
 
 def waiting_page(lang: str) -> str:

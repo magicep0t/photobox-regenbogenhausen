@@ -1,5 +1,6 @@
 """Phone sharing over the hotspot, and the power-off button."""
 
+import dataclasses
 import time
 from pathlib import Path
 
@@ -55,6 +56,25 @@ def test_links_expire():
     assert len(links) == 0  # expired links are dropped, nothing piles up
 
 
+def test_several_links_at_once():
+    now = [1000.0]
+    links = ShareLinks(300, clock=lambda: now[0])
+    a1 = links.create("a.jpg")
+    now[0] += 1
+    b = links.create("b.jpg")
+    now[0] += 1
+    a2 = links.create("a.jpg")  # same photo again: new link, old one still works
+    assert links.resolve(a1) == links.resolve(a2) == "a.jpg"
+    assert links.resolve(b) == "b.jpg"
+    assert links.active() == [(a2, "a.jpg"), (b, "b.jpg")]  # newest first, one per photo
+    now[0] += 299
+    assert links.active() == [(a2, "a.jpg")]
+
+
+def test_default_link_lifetime_is_five_minutes():
+    assert HotspotConfig().link_seconds == 300
+
+
 def test_tokens_are_unique_and_long():
     links = ShareLinks(120)
     tokens = {links.create("a.jpg") for _ in range(100)}
@@ -102,7 +122,7 @@ def test_phone_download_flow(tmp_path):
     with local, phone:
         name = local.post("/api/capture").json()["name"]
         share = local.post(f"/api/share/{name}").json()
-        assert share["expires_in"] == 120
+        assert share["expires_in"] == 300
         assert share["qr_svg"].startswith("<svg")
         assert share["url"].startswith("http://testserver/d/")
         path = share["url"].removeprefix("http://testserver")
@@ -128,7 +148,7 @@ def test_phone_link_expires(tmp_path):
         name = local.post("/api/capture").json()["name"]
         path = local.post(f"/api/share/{name}").json()["url"].removeprefix("http://testserver")
         # fast-forward the clock of the app's link store past the expiry
-        local.app.state.share_links._clock = lambda: time.monotonic() + 121
+        local.app.state.share_links._clock = lambda: time.monotonic() + 301
         r = phone.get(path)
         assert r.status_code == 410
         assert "expired" in r.text
@@ -189,6 +209,27 @@ def test_portal_shows_current_photo(tmp_path):
         assert f"/d/{token}/photo.jpg" in r.text
         assert 'action="/signin"' in r.text
         assert phone.get(f"/d/{token}/photo.jpg").status_code == 200
+
+
+def test_portal_shows_all_shared_photos(tmp_path):
+    local, phone = local_and_phone(tmp_path)
+    with local, phone:
+        names = [local.post("/api/capture").json()["name"] for _ in range(2)]
+        tokens = [local.post(f"/api/share/{n}").json()["url"].rsplit("/", 1)[1] for n in names]
+        page = phone.get("/").text
+        assert page.index(f"/d/{tokens[1]}/") < page.index(f"/d/{tokens[0]}/")  # newest first
+        assert 'action="/signin"' in page
+        for token in tokens:
+            assert phone.get(f"/d/{token}").status_code == 200
+
+
+def test_ui_files_are_revalidated(tmp_path):
+    frontend = tmp_path / "ui"
+    frontend.mkdir()
+    (frontend / "index.html").write_text("<p>hi</p>")
+    cfg = dataclasses.replace(make_cfg(tmp_path), frontend_dir=frontend)
+    with TestClient(create_app(cfg), base_url=LOCAL) as c:
+        assert c.get("/").headers["cache-control"] == "no-cache"
 
 
 @pytest.mark.parametrize(

@@ -46,6 +46,7 @@ let sliding = false;
 let lastPhoto = null; // the photo shown on the result screen
 let shareReturn = "live"; // where "Back" goes from the QR codes
 let shareTimer = null;
+let sharing = false; // a share request is on its way
 
 const t = (key) => TEXTS[lang][key] ?? key;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -112,6 +113,7 @@ function renderMenu() {
 
 function setState(next) {
   if (state === "share" && next !== "share") stopShareTimer();
+  if (next !== state) blockClicks(CLICK_GUARD_MS); // the screen changed under the finger
   state = next;
   app.dataset.state = next;
   if (next.startsWith("power")) renderPower();
@@ -132,13 +134,39 @@ function toggleLanguage() {
   applyTexts();
 }
 
+// ---------- double taps ----------
+
+// The touch panel may report a tap twice (as touch and as mouse), and a tap
+// that changes the screen must not also hit the button that appears under
+// the finger. So clicks right after a click or a screen change are dropped.
+const CLICK_GUARD_MS = 400;
+let clicksBlockedUntil = 0;
+
+function blockClicks(ms) {
+  clicksBlockedUntil = Math.max(clicksBlockedUntil, performance.now() + ms);
+}
+
+document.addEventListener(
+  "click",
+  (e) => {
+    if (performance.now() < clicksBlockedUntil) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      return;
+    }
+    blockClicks(CLICK_GUARD_MS);
+  },
+  true, // capture phase: before any button sees the click
+);
+
 // ---------- idle timeout ----------
 
 function resetIdleTimer() {
   clearTimeout(idleTimer);
-  // share closes itself when its link expires (see openShare)
-  if (["live", "countdown", "share", "powering"].includes(state)) return;
-  idleTimer = setTimeout(goLive, config.idle_timeout_seconds * 1000);
+  if (["live", "countdown", "powering"].includes(state)) return;
+  // the QR codes close after the idle time too; the link itself stays valid
+  const onIdle = state === "share" ? closeShare : goLive;
+  idleTimer = setTimeout(onIdle, config.idle_timeout_seconds * 1000);
 }
 document.addEventListener("pointerdown", resetIdleTimer, { passive: true });
 
@@ -288,7 +316,8 @@ async function step(dir) {
 let drag = null;
 
 viewerEl.addEventListener("pointerdown", (e) => {
-  if (sliding) return;
+  // ignore the doubled tap that just opened the viewer (see "double taps")
+  if (sliding || performance.now() < clicksBlockedUntil) return;
   drag = { id: e.pointerId, x: e.clientX, dx: 0 };
   viewerEl.setPointerCapture(e.pointerId);
 });
@@ -306,7 +335,7 @@ function endDrag(e) {
   drag = null;
   if (Math.abs(dx) < TAP_SLOP) {
     setViewerImage(0);
-    backToGallery(); // a tap closes the viewer
+    backToGallery(); // a tap closes the viewer (and blocks the click that follows)
   } else if (dx <= -SWIPE_THRESHOLD && viewerIndex < galleryPhotos.length - 1) {
     step(1);
   } else if (dx >= SWIPE_THRESHOLD && viewerIndex > 0) {
@@ -353,7 +382,8 @@ async function openWifi() {
 }
 
 async function openShare(photo, returnTo) {
-  if (!photo) return;
+  if (!photo || sharing || state === "share") return;
+  sharing = true;
   let body;
   try {
     await loadWifi();
@@ -364,19 +394,25 @@ async function openShare(photo, returnTo) {
     console.error("share failed", err);
     showToast(t("error_share"));
     return;
+  } finally {
+    sharing = false;
   }
+  if (state !== returnTo) return; // the guest moved on while the code was loading
   photoQr.innerHTML = body.qr_svg;
   shareEl.dataset.mode = "photo";
   shareReturn = returnTo;
   setState("share");
 
-  // count down; when the link expires the codes are useless, so close them
+  // Count down; when the link expires the codes are useless, so close them.
+  // Closing earlier ("Back" or idle) keeps the link valid for the phone.
   const expiresAt = Date.now() + body.expires_in * 1000;
   const tick = () => {
+    if (state !== "share") return stopShareTimer();
     const left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
     shareTimerEl.textContent = `${t("share_valid")} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     if (left === 0) closeShare();
   };
+  clearInterval(shareTimer);
   tick();
   shareTimer = setInterval(tick, 1000);
 }
@@ -388,7 +424,7 @@ function stopShareTimer() {
 }
 
 function closeShare() {
-  setState(shareReturn);
+  if (state === "share") setState(shareReturn);
 }
 
 // ---------- power off ----------

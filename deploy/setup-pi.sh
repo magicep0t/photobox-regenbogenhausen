@@ -102,6 +102,12 @@ chmod 640 "$CONFIG"
 # hostapd is started by photobox-hotspot.service, not by its own unit
 systemctl disable --now hostapd.service 2>/dev/null || true
 
+echo "== Touchscreen =="
+# ignore the panel's mouse emulation, otherwise every tap arrives twice
+install -m 644 "$SCRIPT_DIR"/udev/*.rules /etc/udev/rules.d/
+udevadm control --reload
+udevadm trigger --subsystem-match=input --action=change
+
 echo "== systemd services =="
 install -m 644 "$SCRIPT_DIR"/systemd/*.service /etc/systemd/system/
 systemctl daemon-reload

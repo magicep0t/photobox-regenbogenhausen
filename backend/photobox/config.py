@@ -49,7 +49,7 @@ class HotspotConfig:
     channel: int = 36  # 5 GHz only (36, 40, 44, 48): short range, stays in the room
     address: str = "10.42.0.1"  # the Pi's address in the hotspot network (see deploy/hotspot/)
     port: int = 80  # download server for phones, listens on address:port only
-    link_seconds: int = 120  # how long a photo link stays valid
+    link_seconds: int = 300  # how long a photo link stays valid
 
 
 @dataclass(frozen=True)

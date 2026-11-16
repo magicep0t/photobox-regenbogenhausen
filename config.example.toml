@@ -31,7 +31,7 @@ country = "DE"
 channel = 36                # 5 GHz only: 36, 40, 44 or 48 (short range)
 address = "10.42.0.1"       # must match deploy/hotspot/30-photobox-guestwifi.network
 port = 80
-link_seconds = 120          # a photo link is valid for 2 minutes
+link_seconds = 300          # a photo link is valid for 5 minutes
 
 [system]
 # command behind the power-off button; empty = no button

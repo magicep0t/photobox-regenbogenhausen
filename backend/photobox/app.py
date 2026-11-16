@@ -23,6 +23,7 @@ from .share import (
     expired_page,
     photo_page,
     pick_language,
+    portal_page,
     probe_success,
     qr_svg,
     signed_in_page,
@@ -35,6 +36,18 @@ log = logging.getLogger(__name__)
 BOUNDARY = "frame"
 NO_STORE = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 DEFAULT_FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """UI files that the browser must re-check on every load (cheap 304 if unchanged).
+
+    Without this the kiosk browser may keep running old JavaScript after a deploy.
+    """
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastAPI:
@@ -87,11 +100,9 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
                 return RedirectResponse(portal_url, status_code=302, headers=NO_STORE)
 
             if path == "/":
-                token = links.latest()
-                if token:
-                    name = links.resolve(token)
-                    return HTMLResponse(photo_page(lang, token, f"photobox-{name}", portal=True), headers=NO_STORE)
-                return HTMLResponse(waiting_page(lang), headers=NO_STORE)
+                shared = [(token, f"photobox-{name}") for token, name in links.active() if store.get(name)]
+                page = portal_page(lang, shared) if shared else waiting_page(lang)
+                return HTMLResponse(page, headers=NO_STORE)
             if path == "/signin" and request.method == "POST":
                 signed_in.add(client)
                 log.info("Phone %s signed in to the hotspot portal", client)
@@ -253,7 +264,7 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
 
     frontend_dir = cfg.frontend_dir or DEFAULT_FRONTEND_DIR
     if (frontend_dir / "index.html").exists():
-        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+        app.mount("/", RevalidatedStaticFiles(directory=frontend_dir, html=True), name="frontend")
     else:
         log.warning("No frontend found at %s; serving API only", frontend_dir)
 

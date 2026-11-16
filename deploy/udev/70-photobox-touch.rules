@@ -1,0 +1,9 @@
+# The USB touchscreen "CXDIS" (0416:c168) shows up as two input devices:
+# a real multitouch touchscreen and a mouse that emulates the same taps.
+# The browser would then get every tap twice (two clicks), so libinput
+# ignores everything from this panel that is not the touchscreen.
+# Must run after 60-input-id.rules, which sets ID_INPUT_TOUCHSCREEN.
+# Installed by deploy/setup-pi.sh and deploy/deploy.sh.
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", \
+  ATTRS{idVendor}=="0416", ATTRS{idProduct}=="c168", \
+  ENV{ID_INPUT_TOUCHSCREEN}!="1", ENV{LIBINPUT_IGNORE_DEVICE}="1"
