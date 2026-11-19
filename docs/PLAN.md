@@ -30,6 +30,7 @@
 | 4 ✅ | Kiosk: `photobox.service` + `photobox-kiosk.service`, autostart, no screen blanking, touch check | Pi reboots straight into the booth |
 | 5 ✅ | `deploy/deploy.sh`: rsync laptop → Pi, restart service | one command to deploy |
 | 6 ✅ | Photos to phones: 5 GHz guest hotspot on a USB Wi-Fi stick (hostapd, firewalled), QR codes for Wi-Fi + a 5-minute photo link (several at once); power-off button with two confirmations; no "take photo" button (tap the preview) | guest downloads a photo with a phone |
+| 7 ✅ | Settings screen (gear button): status over the preview (network, devices, SSH, temperature, …); switch home Wi-Fi ↔ standalone (own admin Wi-Fi + DHCP, `192.168.73.0/24`); SSH password login on/off; restart; power off. Booth starts without network and without camera; Camera Module 3 with autofocus | box runs at a party away from home |
 
 ## Later
 

@@ -34,6 +34,10 @@ def test_ui_config_defaults(client):
         "default_language": "en",
         "hotspot": False,
         "power_off": False,
+        "reboot": False,
+        "network_mode": False,
+        "ssh_password": False,
+        "camera": True,
     }
 
 

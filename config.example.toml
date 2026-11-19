@@ -10,8 +10,9 @@ photos_dir = "/var/lib/photobox/photos"
 [camera]
 driver = "picamera2"        # "picamera2" (Pi camera) or "mock" (test images, no hardware)
 rotation = 0                # 0 or 180 (camera mounted upside down)
-# tuning_file = "ov5647_noir.json"   # NoIR camera modules
-preview_size = [1280, 960]
+# tuning_file = "ov5647_noir.json"   # only for NoIR modules; default: libcamera picks the right one
+# preview_size = [1536, 864]         # default: 1536 px wide in the sensor's aspect ratio
+preview_fps = 24            # more only heats up the Pi
 # still_size = [2592, 1944]          # default: sensor maximum
 jpeg_quality = 92
 
@@ -33,7 +34,26 @@ address = "10.42.0.1"       # must match deploy/hotspot/30-photobox-guestwifi.ne
 port = 80
 link_seconds = 300          # a photo link is valid for 5 minutes
 
+[admin_wifi]
+# Standalone mode: the built-in Wi-Fi opens this network for the operator
+# (laptop, SSH) instead of joining the home Wi-Fi. Switched on the settings
+# screen. deploy/setup-pi.sh adds this section with a random password.
+enabled = false
+ssid = "Photobox-Admin"
+password = ""               # 8–63 characters; shown as QR code on the settings screen
+country = "DE"
+channel = 6                 # 2.4 GHz, 1–13
+address = "192.168.73.1"    # must match deploy/admin/10-photobox-wlan0-ap.network
+
 [system]
-# command behind the power-off button; empty = no button
-# (setup-pi.sh sets ["systemctl", "poweroff"], allowed by a polkit rule)
+# Commands behind the buttons on the settings screen; empty = no button.
+# deploy/setup-pi.sh sets these, allowed by deploy/polkit/50-photobox.rules:
+#   power_off_command = ["systemctl", "poweroff"]
+#   reboot_command = ["systemctl", "reboot"]
+#   network_mode_command = ["systemctl", "start", "--no-block", "photobox-netmode@{mode}.service"]
+#   ssh_password_command = ["systemctl", "start", "photobox-ssh-password@{state}.service"]
 power_off_command = []
+reboot_command = []
+network_mode_command = []
+ssh_password_command = []
+network_mode_file = "/etc/photobox/network-mode"   # "home" or "standalone", written by netmode.sh

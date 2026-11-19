@@ -35,6 +35,15 @@ which they can download to their phone by scanning a QR code.
   photo link is random and valid for 5 minutes; several photos can be
   shared at the same time, and the touchscreen stays usable meanwhile
   ("Back" closes the codes, the link keeps working).
+- **Settings screen:** a gear button shows the Pi's status over the live
+  preview (network, connected devices, SSH, CPU temperature, throttling,
+  memory, disk, camera, clock) and holds the buttons for network mode, SSH
+  password login, restart and power off (each asks first).
+- **Home or standalone:** in *home mode* the built-in Wi-Fi joins the home
+  network. In *standalone mode* (parties elsewhere) it opens its own admin
+  Wi-Fi `Photobox-Admin` with DHCP in `192.168.73.0/24` (Pi: `192.168.73.1`);
+  its QR code is on the settings screen. The booth never waits for a network
+  and also starts without a camera (it then says so on screen).
 - **Privacy:** photos stay on the Pi (`/var/lib/photobox/photos`). The touch
   UI and API only listen on `127.0.0.1`. Phones in the hotspot can reach
   nothing but the single photo behind their link (firewalled, no routing,
@@ -47,7 +56,7 @@ which they can download to their phone by scanning a QR code.
 |---|---|
 | Computer | Raspberry Pi 4 (2 GB) |
 | OS | Raspberry Pi OS Lite (64-bit, Debian 13 "trixie") |
-| Camera | Raspberry Pi camera module (OV5647 NoIR) |
+| Camera | Raspberry Pi Camera Module 3 (IMX708, autofocus); OV5647 also works |
 | Display | HDMI touchscreen, 1920×1200 |
 | Hotspot | USB Wi-Fi stick with AP mode (tested: Realtek RTL8822BU, `rtw88`) |
 | Printer | not yet |
@@ -57,7 +66,7 @@ which they can download to their phone by scanning a QR code.
 ```
 backend/    Python package (FastAPI app, camera drivers)
 frontend/   Touch UI served by the backend
-deploy/     Deploy script, systemd units, hotspot, polkit and udev files
+deploy/     Deploy script, systemd units, hotspot, network mode (admin/), polkit and udev files
 docs/       Plan and notes
 ```
 
@@ -92,6 +101,10 @@ PHOTOBOX_CONFIG=../config.local.toml .venv/bin/python -m photobox
 | `GET /thumbs/{name}` | 480 px thumbnail (created on first use) |
 | `GET /api/hotspot` | hotspot name and Wi-Fi QR code (SVG) |
 | `POST /api/share/{name}` | new 5-minute phone link for a photo, with QR code |
+| `GET /api/status` | settings screen: network mode, interfaces, connected devices, SSH, system |
+| `POST /api/network-mode` | `{"mode": "home"\|"standalone"}` (if `[system] network_mode_command` is set) |
+| `POST /api/ssh-password` | `{"enabled": true\|false}` (if `[system] ssh_password_command` is set) |
+| `POST /api/reboot` | restart the Pi (if `[system] reboot_command` is set) |
 | `POST /api/power-off` | power off the Pi (if `[system] power_off_command` is set) |
 
 Phones in the hotspot only get `GET /d/{token}` (download page) and
@@ -103,7 +116,7 @@ First-time setup (packages, `photobox` user, directories, services):
 
 ```bash
 sudo bash deploy/setup-pi.sh   # run from a copy of the repo on the Pi
-sudo reboot                    # boots straight into the booth (~25 s)
+sudo reboot                    # boots straight into the booth (~15 s)
 ```
 
 Two systemd services run the booth:
@@ -113,6 +126,16 @@ Two systemd services run the booth:
 | `photobox.service` | backend as user `photobox` (hardened, writes only to `/var/lib/photobox`) |
 | `photobox-kiosk.service` | `cage` + Chromium full-screen on `tty1`, waits for the backend |
 | `photobox-hotspot.service` | hostapd on the USB stick (named `guestwifi`), runs while it is plugged in |
+| `photobox-netmode.service` | applies the saved network mode at boot (`/etc/photobox/network-mode`) |
+| `photobox-admin-wifi.service` | hostapd on the built-in Wi-Fi, standalone mode only |
+
+The settings screen switches modes and SSH password login by starting
+`photobox-netmode@home|standalone.service` and
+`photobox-ssh-password@on|off.service` (scripts in
+[`deploy/admin/`](deploy/admin/)); [`deploy/polkit/50-photobox.rules`](deploy/polkit/)
+lets the backend start exactly these units, reboot and power off, nothing
+else. SSH password login is off by default (keys only); turn it on only
+briefly, e.g. to copy a new key with `ssh-copy-id`.
 
 The hotspot pieces live in [`deploy/hotspot/`](deploy/hotspot/): the hostapd
 config is generated from the `[hotspot]` section of `config.toml`,
@@ -146,7 +169,13 @@ sudo on the Pi):
 deploy/deploy.sh               # run tests, sync to /opt/photobox, restart what changed
 deploy/deploy.sh --dry-run     # only show what would change
 deploy/deploy.sh --no-tests    # skip the local test run
+deploy/deploy.sh --host=192.168.73.1   # e.g. over the admin Wi-Fi in standalone mode
 ```
+
+New system pieces (packages, units, config keys) come with
+`deploy/setup-pi.sh`; after pulling such a change, run it once on the Pi:
+`sudo bash /opt/photobox/deploy/setup-pi.sh` (safe to run again, never
+overwrites existing settings).
 
 Only what changed is restarted: frontend changes reload the kiosk browser,
 backend changes restart the backend (and the kiosk), changed systemd units are

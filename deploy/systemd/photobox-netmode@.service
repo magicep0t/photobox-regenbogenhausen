@@ -1,0 +1,7 @@
+[Unit]
+Description=Photobox: switch network mode to %i
+# started by the settings screen (allowed by deploy/polkit/50-photobox.rules)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/photobox/deploy/admin/netmode.sh set %i

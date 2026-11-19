@@ -1,0 +1,28 @@
+# Built-in Wi-Fi as admin access point (standalone mode), see netmode.sh.
+# Copied to /run/systemd/network/ only in standalone mode, where it takes
+# precedence over the home Wi-Fi config 20-wlan0.network.
+#
+# 192.168.73.0/24 looks like a home network but is rarely used by routers,
+# so a laptop can be in both without clashes. The Pi is 192.168.73.1.
+# No router and no DNS are announced: a laptop keeps its internet on its
+# other connection.
+[Match]
+Name=wlan0
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+Address=192.168.73.1/24
+DHCPServer=yes
+ConfigureWithoutCarrier=yes
+LinkLocalAddressing=no
+IPv6AcceptRA=no
+
+[DHCPServer]
+PoolOffset=100
+PoolSize=50
+EmitRouter=no
+EmitDNS=no
+EmitNTP=no
+DefaultLeaseTimeSec=3600

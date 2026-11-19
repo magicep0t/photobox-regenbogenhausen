@@ -1,0 +1,15 @@
+[Unit]
+Description=Photobox admin Wi-Fi (standalone mode: built-in Wi-Fi as access point)
+# started and stopped by deploy/admin/netmode.sh, never together with the home Wi-Fi
+Conflicts=wpa_supplicant@wlan0.service
+After=sys-subsystem-net-devices-wlan0.device
+
+[Service]
+Type=exec
+RuntimeDirectory=photobox-admin-wifi
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/sbin/rfkill unblock wlan
+ExecStartPre=/usr/bin/python3 /opt/photobox/deploy/hotspot/hostapd-conf.py admin /etc/photobox/config.toml /run/photobox-admin-wifi/hostapd.conf
+ExecStart=/usr/sbin/hostapd /run/photobox-admin-wifi/hostapd.conf
+Restart=on-failure
+RestartSec=5

@@ -1,0 +1,23 @@
+// What the photobox backend (user "photobox") may do from the settings screen:
+// power off, reboot, and start the units behind the network-mode and SSH
+// buttons. Nothing else.
+polkit.addRule(function (action, subject) {
+  if (subject.user !== "photobox") {
+    return polkit.Result.NOT_HANDLED;
+  }
+  var power = [
+    "org.freedesktop.login1.power-off",
+    "org.freedesktop.login1.power-off-multiple-sessions",
+    "org.freedesktop.login1.reboot",
+    "org.freedesktop.login1.reboot-multiple-sessions",
+  ];
+  if (power.indexOf(action.id) >= 0) {
+    return polkit.Result.YES;
+  }
+  if (action.id === "org.freedesktop.systemd1.manage-units" &&
+      action.lookup("verb") === "start" &&
+      /^photobox-(netmode@(home|standalone)|ssh-password@(on|off))\.service$/.test(action.lookup("unit"))) {
+    return polkit.Result.YES;
+  }
+  return polkit.Result.NOT_HANDLED;
+});

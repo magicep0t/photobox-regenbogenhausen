@@ -1,0 +1,12 @@
+[Unit]
+Description=Photobox network mode at boot (home Wi-Fi or own admin Wi-Fi)
+# see deploy/admin/netmode.sh; the booth never waits for this
+After=systemd-networkd.service
+Wants=systemd-networkd.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/photobox/deploy/admin/netmode.sh apply
+
+[Install]
+WantedBy=multi-user.target

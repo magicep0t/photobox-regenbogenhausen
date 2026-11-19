@@ -9,12 +9,13 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, system
 from .camera import Camera, create_camera
+from .camera.unavailable import CameraUnavailable, UnavailableCamera
 from .config import Config, load_config
 from .photos import PhotoStore
 from .share import (
@@ -52,7 +53,11 @@ class RevalidatedStaticFiles(StaticFiles):
 
 def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastAPI:
     cfg = cfg or load_config()
-    cam = camera or create_camera(cfg.camera)
+    try:
+        cam = camera or create_camera(cfg.camera)
+    except Exception as err:  # no camera must not mean no photobox
+        log.exception("Camera not available")
+        cam = UnavailableCamera(str(err))
     store = PhotoStore(cfg.photos_dir)
     capture_lock = asyncio.Lock()
     hotspot = cfg.hotspot
@@ -62,8 +67,14 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        nonlocal cam
         cfg.photos_dir.mkdir(parents=True, exist_ok=True)
-        await asyncio.to_thread(cam.start)
+        try:
+            await asyncio.to_thread(cam.start)
+        except Exception as err:
+            log.exception("Camera failed to start")
+            cam = UnavailableCamera(str(err))
+            await asyncio.to_thread(cam.start)
         log.info("Camera started: %s", cam.name)
         try:
             yield
@@ -128,6 +139,10 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
             "default_language": cfg.ui.default_language,
             "hotspot": hotspot.enabled,
             "power_off": bool(cfg.system.power_off_command),
+            "reboot": bool(cfg.system.reboot_command),
+            "network_mode": bool(cfg.system.network_mode_command),
+            "ssh_password": bool(cfg.system.ssh_password_command),
+            "camera": not isinstance(cam, UnavailableCamera),
         }
 
     @app.get("/api/stream")
@@ -171,6 +186,9 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
                 await asyncio.to_thread(cam.capture, Path(tmp))
                 os.chmod(tmp, 0o640)
                 os.replace(tmp, path)
+            except CameraUnavailable:
+                Path(tmp).unlink(missing_ok=True)
+                raise HTTPException(503, "Camera not available") from None
             except Exception:
                 log.exception("Capture failed")
                 Path(tmp).unlink(missing_ok=True)
@@ -242,24 +260,75 @@ def create_app(cfg: Config | None = None, camera: Camera | None = None) -> FastA
             headers=NO_STORE,
         )
 
-    # ------------------------------------------------------------ power off
+    # ------------------------------------------------------------ settings screen
 
-    @app.post("/api/power-off", status_code=202)
-    async def power_off():
-        command = cfg.system.power_off_command
+    @app.get("/api/status")
+    async def status():
+        """Everything the settings screen shows: network, connected devices, SSH, system."""
+
+        def collect():
+            data = system.collect_network(cfg.system.network_mode_file)
+            data["ssh"] = system.collect_ssh()
+            data["system"] = system.collect_system(cfg.photos_dir)
+            data["system"]["photos"] = store.count()
+            data["system"]["camera"] = cam.name
+            data["system"]["build"] = build_file.read_text().strip() if build_file.is_file() else "dev"
+            admin = cfg.admin_wifi
+            data["admin_wifi"] = (
+                {
+                    "ssid": admin.ssid,
+                    "address": admin.address,
+                    "qr_svg": wifi_qr_svg(admin.ssid, admin.password),
+                }
+                if admin.enabled and data["mode"] == "standalone"
+                else None
+            )
+            return data
+
+        return await asyncio.to_thread(collect)
+
+    def command_or_404(command: tuple[str, ...], what: str) -> tuple[str, ...]:
         if not command:
-            raise HTTPException(404, "Power off is not enabled")
+            raise HTTPException(404, f"{what} is not enabled")
+        return command
+
+    async def execute(command: list[str]) -> None:
+        if not await asyncio.to_thread(system.execute, command):
+            raise HTTPException(500, "Command failed")
+
+    def later(command: list[str]) -> None:
+        """Run after a second, so the UI can show its goodbye message first."""
 
         async def run():
-            await asyncio.sleep(1)  # let the UI show its goodbye message first
-            log.warning("Powering off: %s", " ".join(command))
-            proc = await asyncio.create_subprocess_exec(*command)
-            if await proc.wait() != 0:
-                log.error("Power off command failed with exit code %s", proc.returncode)
+            await asyncio.sleep(1)
+            await asyncio.to_thread(system.execute, command)
 
         task = asyncio.create_task(run())
         background.add(task)
         task.add_done_callback(background.discard)
+
+    @app.post("/api/network-mode", status_code=202)
+    async def set_network_mode(mode: str = Body(..., embed=True)):
+        command = command_or_404(cfg.system.network_mode_command, "Network mode switching")
+        if mode not in system.MODES:
+            raise HTTPException(422, f"mode must be one of {system.MODES}")
+        await execute(system.fill(command, mode=mode))
+        return {"mode": mode}
+
+    @app.post("/api/ssh-password", status_code=202)
+    async def set_ssh_password(enabled: bool = Body(..., embed=True)):
+        command = command_or_404(cfg.system.ssh_password_command, "SSH settings")
+        await execute(system.fill(command, state="on" if enabled else "off"))
+        return {"password": enabled}
+
+    @app.post("/api/reboot", status_code=202)
+    async def reboot():
+        later(list(command_or_404(cfg.system.reboot_command, "Reboot")))
+        return {"status": "rebooting"}
+
+    @app.post("/api/power-off", status_code=202)
+    async def power_off():
+        later(list(command_or_404(cfg.system.power_off_command, "Power off")))
         return {"status": "powering off"}
 
     frontend_dir = cfg.frontend_dir or DEFAULT_FRONTEND_DIR

@@ -71,3 +71,6 @@ class PhotoStore:
         if limit is not None:
             files = files[:limit]
         return [self.photo(p) for p in files]
+
+    def count(self) -> int:
+        return sum(1 for p in self.directory.glob("*.jpg") if NAME_RE.match(p.name))

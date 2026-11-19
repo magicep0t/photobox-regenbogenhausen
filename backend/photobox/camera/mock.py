@@ -44,7 +44,7 @@ class MockCamera(Camera):
     def _loop(self) -> None:
         while not self._stop.is_set():
             buf = io.BytesIO()
-            self._render(tuple(self._cfg.preview_size), "MOCK PREVIEW").save(buf, "JPEG", quality=70)
+            self._render(tuple(self._cfg.preview_size or (1280, 960)), "MOCK PREVIEW").save(buf, "JPEG", quality=70)
             self.preview.publish(buf.getvalue())
             self._frame_no += 1
             time.sleep(self._interval)

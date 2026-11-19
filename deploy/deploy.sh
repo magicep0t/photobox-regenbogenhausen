@@ -4,6 +4,8 @@
 #   deploy/deploy.sh               run tests, sync, restart what changed
 #   deploy/deploy.sh --no-tests    skip the local test run
 #   deploy/deploy.sh --dry-run     only show what would be copied
+#   deploy/deploy.sh --host=ADDR   use another address than in deploy/.env
+#                                  (e.g. the Pi's admin Wi-Fi or a direct cable)
 #
 # Settings come from deploy/.env (git-ignored), see deploy/.env.example.
 # The SSH user needs passwordless sudo on the Pi.
@@ -14,11 +16,13 @@ cd "$REPO"
 
 RUN_TESTS=1
 DRY_RUN=0
+HOST_OVERRIDE=""
 for arg in "$@"; do
   case "$arg" in
     --no-tests) RUN_TESTS=0 ;;
     --dry-run) DRY_RUN=1 ;;
-    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --host=*) HOST_OVERRIDE="${arg#--host=}" ;;
+    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -29,6 +33,7 @@ if [ ! -f deploy/.env ]; then
 fi
 # shellcheck disable=SC1091
 source deploy/.env
+[ -n "$HOST_OVERRIDE" ] && PHOTOBOX_HOST="$HOST_OVERRIDE"
 : "${PHOTOBOX_HOST:?set PHOTOBOX_HOST in deploy/.env}"
 : "${PHOTOBOX_SSH_USER:?set PHOTOBOX_SSH_USER in deploy/.env}"
 read -r -a SSH_OPTS <<< "${PHOTOBOX_SSH_OPTS:-}"
@@ -99,7 +104,7 @@ if changed 'deploy/hotspot/'; then
   echo "hotspot updated"
 fi
 if changed 'deploy/polkit/'; then
-  remote 'sudo install -m 644 /opt/photobox/deploy/polkit/*.rules /etc/polkit-1/rules.d/'
+  remote 'sudo rm -f /etc/polkit-1/rules.d/50-photobox-power-off.rules && sudo install -m 644 /opt/photobox/deploy/polkit/*.rules /etc/polkit-1/rules.d/'
   echo "polkit rules updated"
 fi
 if changed 'deploy/udev/'; then

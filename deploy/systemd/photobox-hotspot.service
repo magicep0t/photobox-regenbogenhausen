@@ -11,7 +11,7 @@ RuntimeDirectoryMode=0700
 # Raspberry Pi OS soft-blocks new Wi-Fi devices until they are unblocked
 ExecStartPre=/usr/sbin/rfkill unblock wlan
 ExecStartPre=/usr/sbin/nft -f /opt/photobox/deploy/hotspot/hotspot.nft
-ExecStartPre=/usr/bin/python3 /opt/photobox/deploy/hotspot/hostapd-conf.py /etc/photobox/config.toml /run/photobox-hotspot/hostapd.conf
+ExecStartPre=/usr/bin/python3 /opt/photobox/deploy/hotspot/hostapd-conf.py guest /etc/photobox/config.toml /run/photobox-hotspot/hostapd.conf
 ExecStart=/usr/sbin/hostapd /run/photobox-hotspot/hostapd.conf
 Restart=on-failure
 RestartSec=5
