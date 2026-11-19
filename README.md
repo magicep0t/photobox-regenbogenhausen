@@ -56,6 +56,11 @@ services, development and testing) is described in [CLAUDE.md](CLAUDE.md).
 It is written so that an AI assistant, or a curious human, can pick up the
 project without reading the code first.
 
+Claude talks English by default. To use another language, create a
+`CLAUDE.local.md` next to `CLAUDE.md` (git-ignored, only on your machine)
+with a line like `Talk to me in German.` Claude Code reads both files; the
+repository itself stays in English.
+
 ## License
 
 [MIT](LICENSE)

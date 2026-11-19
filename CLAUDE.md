@@ -11,7 +11,9 @@ for the owner is `HowToPhotobox.md`; both are git-excluded via
 - **Every 10 user messages in a session, update this file, `CLAUDE.local.md`
   and `HowToPhotobox.md` without being asked** (whatever changed: features,
   files, state, open items). Also update them at the end of any larger change.
-- Talk to the user in **German**. Code, comments, README, commits in **English**.
+- Talk to the user in **English**, unless `CLAUDE.local.md` names another
+  language (personal preference, e.g. German); that file wins. Code, comments,
+  README, commits are always in **English**.
   UI is English with an EN/DE toggle (`frontend/i18n.js`, keep both languages
   in sync; phone pages in `share.py` too).
 - Plan first for bigger changes; the user approves phases.
