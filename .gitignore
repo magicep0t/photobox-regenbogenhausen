@@ -11,6 +11,7 @@ venv/
 # Local configuration (host, user, secrets) — never commit
 deploy/.env
 config.local.toml
+CLAUDE.local.md
 *.local.toml
 
 # Photos and other runtime data — never commit
